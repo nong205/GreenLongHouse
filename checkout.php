@@ -15,7 +15,72 @@ if(isset($_POST['logout'])){
     header("location: login.php");
     exit;
 }
+
+if(isset($_POST['place_order'])){
+    $name = $_POST['name'];
+    $name = filter_var($name, FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+    $number = $_POST['number'];
+    $number = filter_var($number, FILTER_SANITIZE_NUMBER_INT);
+    $email = $_POST['email'];
+    $email = filter_var($email, FILTER_SANITIZE_EMAIL);
+    $address = $_POST['flat'] . ', ' . $_POST['street'] . ', ' . $_POST['city'] . ', ' . $_POST['country'] . ', ' . $_POST['pincode'];
+    $address = filter_var($address, FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+    $address_type = $_POST['address_type'];
+    $address_type = filter_var($address_type, FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+    $method = $_POST['method'];
+    $method = filter_var($method, FILTER_SANITIZE_FULL_SPECIAL_CHARS);
+
+    $verify_cart = $conn->prepare("SELECT * FROM `cart` WHERE user_id = ?");
+    $verify_cart->execute([$user_id]);
+
+    if(isset($_GET['get_id'])){
+        $get_product = $conn->prepare("SELECT * FROM `products` WHERE id=? LIMIT 1");
+        $get_product->execute([$_GET['get_id']]);
+        if($get_product->rowCount()>0){
+            while($fetch_p = $get_product->fetch(PDO::FETCH_ASSOC)){
+                $insert_order = $conn->prepare("INSERT INTO `orders` (user_id, name, number, email, address, 
+                address_type, method, product_id, price, qty, date, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+
+                if ($insert_order->execute([$user_id, $name, $number, $email, $address, $address_type, $method, $fetch_p['id'], $fetch_p['price'], 1, date('Y-m-d H:i:s'), 'pending'])) {
+                    error_log("Order placed successfully");
+                    header('location: order.php');
+                    exit;
+                } else {
+                    error_log("Failed to place order: " . implode(", ", $insert_order->errorInfo()));
+                }
+            }
+        } else {
+            $warning_msg[] = 'Something went wrong.';
+        }
+    } elseif ($verify_cart->rowCount() > 0) {
+        while ($f_cart = $verify_cart->fetch(PDO::FETCH_ASSOC)) {
+            $select_product = $conn->prepare("SELECT * FROM `products` WHERE id = ?");
+            $select_product->execute([$f_cart['product_id']]);
+            $fetch_product = $select_product->fetch(PDO::FETCH_ASSOC);
+
+            $insert_order = $conn->prepare("INSERT INTO `orders` (user_id, name, number, email, address, address_type, method, product_id, price, qty, date, status) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)");
+
+            if ($insert_order->execute([$user_id, $name, $number, $email, $address, $address_type, $method, $fetch_product['id'], $f_cart['price'], $f_cart['qty'], date('Y-m-d H:i:s'), 'pending'])) {
+                error_log("Order placed successfully");
+            } else {
+                error_log("Failed to place order: " . implode(", ", $insert_order->errorInfo()));
+            }
+        }
+
+        if ($insert_order) {
+            $delete_cart_id = $conn->prepare("DELETE FROM `cart` WHERE user_id = ?");
+            $delete_cart_id->execute([$user_id]);
+            header('location: order.php');
+            exit;
+        }
+    } else {
+        $warning_msg[] = 'Something went wrong.';
+    }
+}
+
+
 ?>
+
 <style type="text/css">
     <?php include 'style.css'; ?>
 </style>
